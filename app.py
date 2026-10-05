@@ -7400,11 +7400,17 @@ elif module == "Portfolio":
             unsafe_allow_html=True,
         )
 
-    if st.button(
+    analyze_clicked = st.button(
         "ANALYZE PORTFOLIO",
         type="primary",
         key="portfolio_analyze_button",
-    ):
+    )
+
+    if analyze_clicked:
+        st.session_state["portfolio_analysis_active"] = True
+        st.session_state.pop("portfolio_ai_result", None)
+
+    if st.session_state.get("portfolio_analysis_active", False):
 
         holdings = [
             r
@@ -7608,6 +7614,13 @@ elif module == "Portfolio":
                             else "DATA NOT AVAILABLE"
                         ),
                     )
+
+                    stored_portfolio_ai = st.session_state.get(
+                        "portfolio_ai_result"
+                    )
+
+                    if stored_portfolio_ai:
+                        st.markdown(stored_portfolio_ai)
 
                     st.caption(
                         "Risk score is a deterministic educational model based "
@@ -8379,7 +8392,7 @@ STRUCTURED PORTFOLIO CONTEXT:
                                 )
 
                                 if ai_result:
-                                    st.markdown(ai_result)
+                                    st.session_state["portfolio_ai_result"] = ai_result
 
                                 else:
                                     st.warning(
