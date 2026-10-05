@@ -35,6 +35,15 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta, timezone
 from ai.gemini_engine import generate_analysis
+from portfolio_analytics import (
+    build_portfolio_returns,
+    correlation_matrix,
+    group_exposure,
+    portfolio_summary,
+    risk_contribution,
+    stress_test,
+    rebalance_plan,
+)
 
 from universe import (
     load_universe,
@@ -7287,97 +7296,119 @@ elif module == "Technical Analysis":
             )
 
 # ============================================================
-# PORTFOLIO
+# PORTFOLIO INTELLIGENCE
 # ============================================================
 
 elif module == "Portfolio":
 
     render_apex_page_header(
-        "Portfolio Analysis",
-        "Quantitative holdings review, allocation and market-value workstation",
+        "Portfolio Intelligence",
+        "Holdings, risk, diversification, scenarios and portfolio decision support",
         "PORTFOLIO",
         datetime.now(IST).strftime("%a %d %b %Y • %H:%M IST")
     )
 
     with st.container(key="portfolio-analysis-page"):
+
         st.markdown(
             """
             <div class='portfolio-section-heading'>
                 <div>
                     <div class='portfolio-kicker'>PORTFOLIO CONTROL CENTER</div>
-                    <div class='portfolio-section-title'>Holdings and position sizing</div>
+                    <div class='portfolio-section-title'>
+                        Build and analyze your portfolio
+                    </div>
                 </div>
-                <div class='portfolio-section-meta'>YAHOO FINANCE / DELAYED</div>
+                <div class='portfolio-section-meta'>
+                    YAHOO FINANCE / DELAYED
+                </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-    st.markdown(
-        "<div class='portfolio-helper-text'>Enter security and quantity. "
-        "Current market values are calculated from the retrieved closing data.</div>",
-        unsafe_allow_html=True,
-    )
-
-    rows = st.session_state["portfolio_rows"]
-
-    for i, row in enumerate(rows):
-
-        c1, c2, c3 = st.columns([2, 1, 0.4])
-
-        with c1:
-            selected_pf_ticker = security_dropdown(
-                label=f"Company {i + 1}",
-                key=f"pf_ticker_dropdown_{i}",
-            )
-
-            if selected_pf_ticker:
-                row["ticker"] = selected_pf_ticker
-
-        with c2:
-            row["qty"] = st.number_input(
-                f"Qty {i + 1}",
-                min_value=0.0,
-                value=float(row.get("qty", 0)),
-                key=f"pf_qty_{i}",
-            )
-
-        with c3:
-            st.write("")
-
-            if st.button(
-                "x",
-                key=f"pf_remove_{i}",
-            ):
-                st.session_state["portfolio_rows"].pop(i)
-                st.rerun()
-
-    if st.button("+ ADD HOLDING"):
-        st.session_state["portfolio_rows"].append(
-            {
-                "ticker": "",
-                "qty": 0,
-            }
+        st.markdown(
+            "<div class='portfolio-helper-text'>"
+            "Add securities and quantities. Portfolio analytics are calculated "
+            "deterministically in Python. Gemini is used only when you explicitly "
+            "request AI interpretation."
+            "</div>",
+            unsafe_allow_html=True,
         )
-        st.rerun()
 
-    st.markdown(
-        """
-        <div class='portfolio-section-heading portfolio-review-heading'>
-            <div>
-                <div class='portfolio-kicker'>PORTFOLIO REVIEW</div>
-                <div class='portfolio-section-title'>Market value and allocation</div>
+        rows = st.session_state["portfolio_rows"]
+
+        for i, row in enumerate(rows):
+
+            c1, c2, c3 = st.columns([2, 1, 0.4])
+
+            with c1:
+
+                selected_pf_ticker = security_dropdown(
+                    label=f"Security {i + 1}",
+                    key=f"pf_ticker_dropdown_{i}",
+                )
+
+                if selected_pf_ticker:
+                    row["ticker"] = selected_pf_ticker
+
+            with c2:
+
+                row["qty"] = st.number_input(
+                    f"Quantity {i + 1}",
+                    min_value=0.0,
+                    value=float(row.get("qty", 0)),
+                    key=f"pf_qty_{i}",
+                )
+
+            with c3:
+
+                st.write("")
+
+                if st.button(
+                    "x",
+                    key=f"pf_remove_{i}",
+                ):
+                    st.session_state["portfolio_rows"].pop(i)
+                    st.rerun()
+
+        if st.button("+ ADD HOLDING"):
+
+            st.session_state["portfolio_rows"].append(
+                {
+                    "ticker": "",
+                    "qty": 0,
+                }
+            )
+
+            st.rerun()
+
+        st.markdown(
+            """
+            <div class='portfolio-section-heading portfolio-review-heading'>
+                <div>
+                    <div class='portfolio-kicker'>PORTFOLIO REVIEW</div>
+                    <div class='portfolio-section-title'>
+                        Quantitative portfolio intelligence
+                    </div>
+                </div>
+                <div class='portfolio-section-meta'>
+                    DETERMINISTIC PYTHON ANALYTICS
+                </div>
             </div>
-            <div class='portfolio-section-meta'>CALCULATED FROM CURRENT HOLDINGS</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            """,
+            unsafe_allow_html=True,
+        )
 
-    if st.button("ANALYZE PORTFOLIO", type="primary"):
+    if st.button(
+        "ANALYZE PORTFOLIO",
+        type="primary",
+        key="portfolio_analyze_button",
+    ):
 
         holdings = [
-            r for r in rows
+            r
+            for r in rows
             if r.get("ticker", "").strip()
             and r.get("qty", 0) > 0
         ]
@@ -7392,28 +7423,48 @@ elif module == "Portfolio":
 
             hold_rows = []
             price_series = {}
+            metadata = {}
 
             for h in holdings:
 
                 t = normalize_ticker(h["ticker"])
-                hist = get_history(t, "1y", "1d")
+
+                hist = get_history(
+                    t,
+                    "1y",
+                    "1d",
+                )
 
                 if hist.empty:
+
                     st.warning(
-                        f"No data found for {h['ticker']}  skipping."
+                        f"No historical data found for {h['ticker']} — skipped."
+                    )
+
+                    continue
+
+                try:
+                    current_price = float(hist["Close"].dropna().iloc[-1])
+                except Exception:
+                    st.warning(
+                        f"Current price unavailable for {h['ticker']} — skipped."
                     )
                     continue
 
-                current_price = hist["Close"].iloc[-1]
-
                 price_series[t] = hist["Close"]
 
-                market_value = current_price * h["qty"]
+                metadata[t] = UNIVERSE_BY_TICKER.get(
+                    t,
+                    {}
+                )
+
+                market_value = current_price * float(h["qty"])
 
                 hold_rows.append(
                     {
                         "Ticker": display_ticker(t),
-                        "Qty": h["qty"],
+                        "TickerRaw": t,
+                        "Qty": float(h["qty"]),
                         "Current Price": current_price,
                         "Market Value": market_value,
                     }
@@ -7422,123 +7473,960 @@ elif module == "Portfolio":
             if not hold_rows:
 
                 st.error(
-                    "None of the entered holdings returned usable data."
+                    "None of the entered holdings returned usable market data."
                 )
 
             else:
 
                 pf_df = pd.DataFrame(hold_rows)
 
-                total_mv = pf_df["Market Value"].sum()
+                total_mv = float(
+                    pf_df["Market Value"].sum()
+                )
 
-                if total_mv:
+                if total_mv <= 0:
+
+                    st.error(
+                        "Portfolio market value is zero."
+                    )
+
+                else:
+
                     pf_df["Weight %"] = (
                         pf_df["Market Value"]
                         / total_mv
-                        * 100
+                        * 100.0
                     )
-                else:
-                    pf_df["Weight %"] = 0.0
 
-                st.markdown(
-                    "<div class='portfolio-subsection-label'>POSITION SUMMARY</div>",
-                    unsafe_allow_html=True,
-                )
+                    weights = {
+                        row["TickerRaw"]:
+                        float(row["Market Value"]) / total_mv
+                        for _, row in pf_df.iterrows()
+                    }
 
-                # ------------------------------------------------
-                # SUMMARY
-                # ------------------------------------------------
+                    # ====================================================
+                    # PORTFOLIO RETURNS
+                    # ====================================================
 
-                c1, c2, c3 = st.columns(3)
+                    portfolio_returns = build_portfolio_returns(
+                        price_series,
+                        weights,
+                    )
 
-                c1.metric(
-                    "Portfolio Value",
-                    format_inr_scale(total_mv),
-                )
+                    # INR-only portfolio gets an educational 6.5%
+                    # risk-free proxy. Mixed/international portfolios use 0.
+                    currencies = {
+                        str(
+                            metadata.get(
+                                ticker,
+                                {}
+                            ).get(
+                                "currency",
+                                ""
+                            )
+                        ).upper()
+                        for ticker in weights
+                        if metadata.get(
+                            ticker,
+                            {}
+                        ).get("currency")
+                    }
 
-                c2.metric(
-                    "Holdings",
-                    len(pf_df),
-                )
+                    risk_free = (
+                        0.065
+                        if currencies == {"INR"}
+                        else 0.0
+                    )
 
-                top_holding = pf_df.loc[
-                    pf_df["Market Value"].idxmax()
-                ]
+                    metrics = portfolio_summary(
+                        portfolio_returns,
+                        weights,
+                        metadata,
+                        total_mv,
+                        risk_free=risk_free,
+                    )
 
-                c3.metric(
-                    "Top Holding",
-                    top_holding["Ticker"],
-                    format_inr_scale(
-                        top_holding["Market Value"]
-                    ),
-                )
+                    # ====================================================
+                    # PORTFOLIO HEALTH
+                    # ====================================================
 
-                st.markdown(
-                    "<div class='portfolio-subsection-label'>HOLDINGS LEDGER</div>",
-                    unsafe_allow_html=True,
-                )
+                    st.markdown(
+                        "<div class='portfolio-subsection-label'>"
+                        "PORTFOLIO HEALTH"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
 
-                # ------------------------------------------------
-                # DISPLAY TABLE
-                # ------------------------------------------------
+                    h1, h2, h3, h4, h5 = st.columns(5)
 
-                display_pf = pf_df.copy()
+                    h1.metric(
+                        "Portfolio Value",
+                        format_inr_scale(total_mv),
+                    )
 
-                display_pf["Current Price"] = (
-                    display_pf["Current Price"]
-                    .apply(lambda v: f"INR {v:,.2f}")
-                )
+                    risk_score = metrics.get("risk_score")
 
-                display_pf["Market Value"] = (
-                    display_pf["Market Value"]
-                    .apply(lambda v: f"INR {v:,.2f}")
-                )
-
-                display_pf["Weight %"] = (
-                    display_pf["Weight %"]
-                    .apply(lambda v: f"{v:.2f}%")
-                )
-
-                render_terminal_table(display_pf, empty_message="No portfolio data available.")
-
-                st.download_button(
-                    "Download portfolio (CSV)",
-                    pf_df.to_csv(index=False).encode("utf-8"),
-                    file_name="portfolio.csv",
-                )
-
-                st.markdown(
-                    "<div class='portfolio-subsection-label'>ALLOCATION MONITOR</div>",
-                    unsafe_allow_html=True,
-                )
-
-                # ------------------------------------------------
-                # CHARTS
-                # ------------------------------------------------
-
-                pc1, pc2 = st.columns(2)
-
-                with pc1:
-                    st.plotly_chart(
-                        create_allocation_pie(
-                            pf_df["Ticker"],
-                            pf_df["Market Value"],
+                    h2.metric(
+                        "Risk Score",
+                        (
+                            f"{risk_score:.0f}/100"
+                            if risk_score is not None
+                            else "DATA NOT AVAILABLE"
                         ),
-                        width="stretch",
                     )
 
-                with pc2:
-                    st.plotly_chart(
-                        create_bar_comparison(
-                            pf_df["Ticker"].tolist(),
-                            {
-                                "Market Value":
-                                pf_df["Market Value"].tolist()
+                    h3.metric(
+                        "Risk Profile",
+                        metrics.get(
+                            "risk_label",
+                            "DATA NOT AVAILABLE",
+                        ),
+                    )
+
+                    diversification = metrics.get(
+                        "diversification_score"
+                    )
+
+                    h4.metric(
+                        "Diversification",
+                        (
+                            f"{diversification:.0f}/100"
+                            if diversification is not None
+                            else "DATA NOT AVAILABLE"
+                        ),
+                    )
+
+                    effective = metrics.get(
+                        "effective_holdings"
+                    )
+
+                    h5.metric(
+                        "Effective Holdings",
+                        (
+                            f"{effective:.1f}"
+                            if effective is not None
+                            else "DATA NOT AVAILABLE"
+                        ),
+                    )
+
+                    st.caption(
+                        "Risk score is a deterministic educational model based "
+                        "on volatility, drawdown, concentration, diversification "
+                        "and crypto exposure. It is not personalized investment advice."
+                    )
+
+                    # ====================================================
+                    # CORE RETURN / RISK METRICS
+                    # ====================================================
+
+                    st.markdown(
+                        "<div class='portfolio-subsection-label'>"
+                        "RETURN & RISK PROFILE"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    m1, m2, m3, m4 = st.columns(4)
+
+                    annual_return = metrics.get("annual_return")
+                    volatility = metrics.get("volatility")
+                    sharpe = metrics.get("sharpe")
+                    sortino = metrics.get("sortino")
+
+                    m1.metric(
+                        "Annualized Return",
+                        (
+                            f"{annual_return * 100:.2f}%"
+                            if annual_return is not None
+                            else "DATA NOT AVAILABLE"
+                        ),
+                    )
+
+                    m2.metric(
+                        "Annualized Volatility",
+                        (
+                            f"{volatility * 100:.2f}%"
+                            if volatility is not None
+                            else "DATA NOT AVAILABLE"
+                        ),
+                    )
+
+                    m3.metric(
+                        "Sharpe Ratio",
+                        (
+                            f"{sharpe:.2f}"
+                            if sharpe is not None
+                            else "DATA NOT AVAILABLE"
+                        ),
+                    )
+
+                    m4.metric(
+                        "Sortino Ratio",
+                        (
+                            f"{sortino:.2f}"
+                            if sortino is not None
+                            else "DATA NOT AVAILABLE"
+                        ),
+                    )
+
+                    m5, m6, m7, m8 = st.columns(4)
+
+                    max_dd = metrics.get("max_drawdown")
+                    var95 = metrics.get("var95")
+                    var99 = metrics.get("var99")
+                    es95 = metrics.get("expected_shortfall")
+
+                    m5.metric(
+                        "Maximum Drawdown",
+                        (
+                            f"{max_dd * 100:.2f}%"
+                            if max_dd is not None
+                            else "DATA NOT AVAILABLE"
+                        ),
+                    )
+
+                    m6.metric(
+                        "Historical VaR 95%",
+                        (
+                            f"{var95 * 100:.2f}%"
+                            if var95 is not None
+                            else "DATA NOT AVAILABLE"
+                        ),
+                    )
+
+                    m7.metric(
+                        "Historical VaR 99%",
+                        (
+                            f"{var99 * 100:.2f}%"
+                            if var99 is not None
+                            else "DATA NOT AVAILABLE"
+                        ),
+                    )
+
+                    m8.metric(
+                        "Expected Shortfall",
+                        (
+                            f"{es95 * 100:.2f}%"
+                            if es95 is not None
+                            else "DATA NOT AVAILABLE"
+                        ),
+                    )
+
+                    # ====================================================
+                    # HOLDINGS LEDGER
+                    # ====================================================
+
+                    st.markdown(
+                        "<div class='portfolio-subsection-label'>"
+                        "HOLDINGS LEDGER"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    holdings_display = pf_df[
+                        [
+                            "Ticker",
+                            "Qty",
+                            "Current Price",
+                            "Market Value",
+                            "Weight %",
+                        ]
+                    ].copy()
+
+                    holdings_display["Qty"] = holdings_display[
+                        "Qty"
+                    ].map(
+                        lambda x: f"{x:,.2f}"
+                    )
+
+                    holdings_display["Current Price"] = holdings_display[
+                        "Current Price"
+                    ].map(
+                        lambda x: f"₹{x:,.2f}"
+                    )
+
+                    holdings_display["Market Value"] = holdings_display[
+                        "Market Value"
+                    ].map(
+                        lambda x: f"₹{x:,.2f}"
+                    )
+
+                    holdings_display["Weight %"] = holdings_display[
+                        "Weight %"
+                    ].map(
+                        lambda x: f"{x:.2f}%"
+                    )
+
+                    render_terminal_table(
+                        holdings_display,
+                        empty_message="No holdings available.",
+                    )
+
+                    # ====================================================
+                    # CONCENTRATION
+                    # ====================================================
+
+                    st.markdown(
+                        "<div class='portfolio-subsection-label'>"
+                        "CONCENTRATION & DIVERSIFICATION"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    c1, c2 = st.columns(2)
+
+                    with c1:
+
+                        allocation_chart = go.Figure()
+
+                        allocation_chart.add_trace(
+                            go.Pie(
+                                labels=pf_df["Ticker"],
+                                values=pf_df["Weight %"],
+                                hole=0.55,
+                            )
+                        )
+
+                        allocation_chart.update_layout(
+                            template="plotly_dark",
+                            height=360,
+                            margin=dict(
+                                l=20,
+                                r=20,
+                                t=30,
+                                b=20,
+                            ),
+                        )
+
+                        st.plotly_chart(
+                            allocation_chart,
+                            width="stretch",
+                            config={
+                                "responsive": True,
+                                "displaylogo": False,
                             },
-                            "Market Value by Holding",
-                        ),
-                        width="stretch",
+                        )
+
+                    with c2:
+
+                        concentration_rows = pd.DataFrame(
+                            {
+                                "Metric": [
+                                    "HHI",
+                                    "Effective Holdings",
+                                    "Concentration Score",
+                                    "Diversification Score",
+                                ],
+                                "Value": [
+                                    metrics.get("hhi"),
+                                    metrics.get("effective_holdings"),
+                                    metrics.get("concentration_score"),
+                                    metrics.get("diversification_score"),
+                                ],
+                            }
+                        )
+
+                        render_terminal_table(
+                            concentration_rows,
+                            empty_message="Concentration data unavailable.",
+                        )
+
+                    # ====================================================
+                    # EXPOSURE ANALYSIS
+                    # ====================================================
+
+                    st.markdown(
+                        "<div class='portfolio-subsection-label'>"
+                        "EXPOSURE ANALYSIS"
+                        "</div>",
+                        unsafe_allow_html=True,
                     )
+
+                    sector_df = group_exposure(
+                        weights,
+                        metadata,
+                        "sector",
+                    )
+
+                    country_df = group_exposure(
+                        weights,
+                        metadata,
+                        "country",
+                    )
+
+                    currency_df = group_exposure(
+                        weights,
+                        metadata,
+                        "currency",
+                    )
+
+                    e1, e2, e3 = st.columns(3)
+
+                    with e1:
+                        st.caption("SECTOR EXPOSURE")
+                        render_terminal_table(
+                            sector_df,
+                            empty_message="Sector data unavailable.",
+                        )
+
+                    with e2:
+                        st.caption("GEOGRAPHIC EXPOSURE")
+                        render_terminal_table(
+                            country_df,
+                            empty_message="Country data unavailable.",
+                        )
+
+                    with e3:
+                        st.caption("CURRENCY EXPOSURE")
+                        render_terminal_table(
+                            currency_df,
+                            empty_message="Currency data unavailable.",
+                        )
+
+                    # ====================================================
+                    # RISK CONTRIBUTION
+                    # ====================================================
+
+                    st.markdown(
+                        "<div class='portfolio-subsection-label'>"
+                        "RISK CONTRIBUTION"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    returns_df = pd.concat(
+                        [
+                            pd.to_numeric(
+                                series,
+                                errors="coerce"
+                            ).pct_change().rename(ticker)
+                            for ticker, series in price_series.items()
+                        ],
+                        axis=1,
+                    )
+
+                    rc_df = risk_contribution(
+                        returns_df,
+                        weights,
+                    )
+
+                    if not rc_df.empty:
+
+                        render_terminal_table(
+                            rc_df,
+                            empty_message="Risk contribution unavailable.",
+                        )
+
+                    else:
+
+                        st.info(
+                            "Risk contribution requires at least two usable "
+                            "return series."
+                        )
+
+                    # ====================================================
+                    # CORRELATION
+                    # ====================================================
+
+                    st.markdown(
+                        "<div class='portfolio-subsection-label'>"
+                        "CORRELATION MATRIX"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    corr_df = correlation_matrix(
+                        returns_df
+                    )
+
+                    if not corr_df.empty:
+
+                        corr_display = corr_df.copy()
+
+                        corr_display.index = [
+                            display_ticker(x)
+                            for x in corr_display.index
+                        ]
+
+                        corr_display.columns = [
+                            display_ticker(x)
+                            for x in corr_display.columns
+                        ]
+
+                        st.dataframe(
+                            corr_display.round(2),
+                            width="stretch",
+                        )
+
+                    else:
+
+                        st.info(
+                            "Correlation matrix requires at least two "
+                            "usable securities with overlapping history."
+                        )
+
+                    # ====================================================
+                    # PERFORMANCE
+                    # ====================================================
+
+                    st.markdown(
+                        "<div class='portfolio-subsection-label'>"
+                        "PORTFOLIO PERFORMANCE"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    if not portfolio_returns.empty:
+
+                        cumulative = (
+                            (1 + portfolio_returns)
+                            .cumprod()
+                            - 1
+                        ) * 100
+
+                        perf_chart = go.Figure()
+
+                        perf_chart.add_trace(
+                            go.Scatter(
+                                x=cumulative.index,
+                                y=cumulative.values,
+                                mode="lines",
+                                name="Portfolio",
+                            )
+                        )
+
+                        perf_chart.update_layout(
+                            template="plotly_dark",
+                            height=360,
+                            yaxis_title="Cumulative Return (%)",
+                            xaxis_title="Date",
+                            margin=dict(
+                                l=45,
+                                r=15,
+                                t=30,
+                                b=35,
+                            ),
+                        )
+
+                        st.plotly_chart(
+                            perf_chart,
+                            width="stretch",
+                            config={
+                                "responsive": True,
+                                "displaylogo": False,
+                            },
+                        )
+
+                        dd = metrics.get(
+                            "drawdown_series"
+                        )
+
+                        if dd is not None and not dd.empty:
+
+                            dd_chart = go.Figure()
+
+                            dd_chart.add_trace(
+                                go.Scatter(
+                                    x=dd.index,
+                                    y=dd.values * 100,
+                                    mode="lines",
+                                    fill="tozeroy",
+                                    name="Drawdown",
+                                )
+                            )
+
+                            dd_chart.update_layout(
+                                template="plotly_dark",
+                                height=320,
+                                yaxis_title="Drawdown (%)",
+                                xaxis_title="Date",
+                            )
+
+                            st.plotly_chart(
+                                dd_chart,
+                                width="stretch",
+                                config={
+                                    "responsive": True,
+                                    "displaylogo": False,
+                                },
+                            )
+
+                    # ====================================================
+                    # SCENARIO ANALYSIS
+                    # ====================================================
+
+                    st.markdown(
+                        "<div class='portfolio-subsection-label'>"
+                        "SCENARIO ANALYSIS"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    scenarios = metrics.get(
+                        "scenarios",
+                        {},
+                    )
+
+                    scenario_df = pd.DataFrame(
+                        [
+                            {
+                                "Scenario": name,
+                                "Return Estimate": (
+                                    value * 100
+                                    if value is not None
+                                    else None
+                                ),
+                            }
+                            for name, value in scenarios.items()
+                        ]
+                    )
+
+                    if not scenario_df.empty:
+
+                        scenario_display = scenario_df.copy()
+
+                        scenario_display[
+                            "Return Estimate"
+                        ] = scenario_display[
+                            "Return Estimate"
+                        ].map(
+                            lambda x:
+                            f"{x:+.2f}%"
+                            if pd.notna(x)
+                            else "DATA NOT AVAILABLE"
+                        )
+
+                        render_terminal_table(
+                            scenario_display,
+                            empty_message="Scenario data unavailable.",
+                        )
+
+                    st.caption(
+                        "Bear/Base/Bull scenarios are deterministic historical "
+                        "frameworks and are not forecasts or guarantees."
+                    )
+
+                    # ====================================================
+                    # STRESS TEST
+                    # ====================================================
+
+                    st.markdown(
+                        "<div class='portfolio-subsection-label'>"
+                        "PORTFOLIO STRESS TEST"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    stress_scenario = st.selectbox(
+                        "Scenario",
+                        [
+                            "Global Equity Crash",
+                            "Interest Rate Shock",
+                            "Inflation Shock",
+                            "Crypto Crash",
+                            "USD Strengthening",
+                        ],
+                        key="portfolio_stress_scenario",
+                    )
+
+                    stress = stress_test(
+                        weights,
+                        metadata,
+                        total_mv,
+                        stress_scenario,
+                    )
+
+                    s1, s2, s3 = st.columns(3)
+
+                    s1.metric(
+                        "Scenario",
+                        stress_scenario,
+                    )
+
+                    s2.metric(
+                        "Estimated Portfolio Impact",
+                        f"{stress['impact_pct'] * 100:+.2f}%",
+                    )
+
+                    s3.metric(
+                        "Estimated ₹ Impact",
+                        format_inr_scale(
+                            stress["impact_value"]
+                        ),
+                    )
+
+                    st.caption(
+                        "Stress tests apply deterministic asset-class shocks. "
+                        "They are scenario analysis, not predictions."
+                    )
+
+                    # ====================================================
+                    # REBALANCING
+                    # ====================================================
+
+                    st.markdown(
+                        "<div class='portfolio-subsection-label'>"
+                        "REBALANCING ANALYSIS"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    rebalance_profile = st.selectbox(
+                        "Reference Risk Profile",
+                        [
+                            "Conservative",
+                            "Moderate",
+                            "Aggressive",
+                        ],
+                        index=1,
+                        key="portfolio_rebalance_profile",
+                    )
+
+                    rebalance_df = rebalance_plan(
+                        weights,
+                        metadata,
+                        total_mv,
+                        rebalance_profile,
+                    )
+
+                    rebalance_display = rebalance_df.copy()
+
+                    if not rebalance_display.empty:
+
+                        rebalance_display["Current %"] = (
+                            rebalance_display["Current %"]
+                            .map(lambda x: f"{x:.2f}%")
+                        )
+
+                        rebalance_display["Target %"] = (
+                            rebalance_display["Target %"]
+                            .map(lambda x: f"{x:.2f}%")
+                        )
+
+                        rebalance_display["Difference %"] = (
+                            rebalance_display["Difference %"]
+                            .map(lambda x: f"{x:+.2f}%")
+                        )
+
+                        rebalance_display["Approx. ₹ Change"] = (
+                            rebalance_display["Approx. ₹ Change"]
+                            .map(lambda x: f"INR {x:+,.0f}")
+                        )
+
+                        render_terminal_table(
+                            rebalance_display,
+                            empty_message="Rebalancing data unavailable.",
+                        )
+
+                    st.caption(
+                        "Reference allocations are educational model portfolios, "
+                        "not personalized investment recommendations."
+                    )
+
+                    # ====================================================
+                    # AI PORTFOLIO INTELLIGENCE
+                    # ====================================================
+
+                    st.markdown(
+                        "<div class='portfolio-subsection-label'>"
+                        "AI PORTFOLIO INTELLIGENCE"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    st.caption(
+                        "Gemini is not called automatically. Click the button "
+                        "only when you want an AI interpretation."
+                    )
+
+                    if st.button(
+                        "GENERATE AI PORTFOLIO INTELLIGENCE",
+                        type="secondary",
+                        key="portfolio_ai_analysis",
+                    ):
+
+                        def _fmt_pct(value):
+                            if value is None:
+                                return "DATA NOT AVAILABLE"
+                            return f"{value * 100:.2f}%"
+
+                        def _fmt_num(value, digits=2):
+                            if value is None:
+                                return "DATA NOT AVAILABLE"
+                            return f"{value:.{digits}f}"
+
+                        ai_context = f"""
+PORTFOLIO INTELLIGENCE CONTEXT
+
+Portfolio value:
+INR {total_mv:,.2f}
+
+Number of holdings:
+{len(pf_df)}
+
+Risk score:
+{_fmt_num(metrics.get("risk_score"))}/100
+
+Risk classification:
+{metrics.get("risk_label", "DATA NOT AVAILABLE")}
+
+Historical annualized return:
+{_fmt_pct(metrics.get("annual_return"))}
+
+Annualized volatility:
+{_fmt_pct(metrics.get("volatility"))}
+
+Sharpe:
+{_fmt_num(metrics.get("sharpe"), 3)}
+
+Sortino:
+{_fmt_num(metrics.get("sortino"), 3)}
+
+Maximum drawdown:
+{_fmt_pct(metrics.get("max_drawdown"))}
+
+Historical VaR 95%:
+{_fmt_pct(metrics.get("var95"))}
+
+Historical VaR 99%:
+{_fmt_pct(metrics.get("var99"))}
+
+Expected Shortfall:
+{_fmt_pct(metrics.get("expected_shortfall"))}
+
+HHI:
+{_fmt_num(metrics.get("hhi"), 4)}
+
+Effective number of holdings:
+{_fmt_num(metrics.get("effective_holdings"))}
+
+Diversification score:
+{_fmt_num(metrics.get("diversification_score"))}/100
+
+Top holdings:
+{pf_df.sort_values("Weight %", ascending=False)
+      .head(5)[["Ticker", "Weight %"]]
+      .to_dict("records")}
+
+Sector exposure:
+{sector_df.to_dict("records")}
+
+Geographic exposure:
+{country_df.to_dict("records")}
+
+Currency exposure:
+{currency_df.to_dict("records")}
+
+Stress scenario:
+{stress_scenario}
+
+Stress impact:
+{stress["impact_pct"] * 100:.2f}%
+
+Stress value impact:
+INR {stress["impact_value"]:,.2f}
+
+The analysis must distinguish:
+- historical measurements
+- scenario analysis
+- model assumptions
+- interpretation
+
+Do not invent additional portfolio numbers.
+Do not guarantee future returns.
+Do not present the output as regulated personalized investment advice.
+"""
+
+                        ai_prompt = f"""
+You are the portfolio intelligence layer of a professional
+financial analysis terminal.
+
+Use ONLY the structured portfolio context below.
+
+Provide a concise but sophisticated portfolio assessment covering:
+
+1. Overall portfolio assessment
+2. Risk classification and why it received that classification
+3. Historical return and volatility interpretation
+4. Concentration and diversification
+5. Sector, geographic and currency exposures
+6. Most important portfolio risks
+7. Stress-test interpretation
+8. Rebalancing observations
+9. Practical areas the investor may want to review
+
+Do not invent data.
+Do not guarantee returns.
+Do not instruct the user to buy or sell a specific security as if
+you were a licensed investment adviser.
+
+Explain the numbers rather than merely repeating them.
+
+STRUCTURED PORTFOLIO CONTEXT:
+{ai_context}
+"""
+
+                        with st.spinner(
+                            "Gemini is interpreting the portfolio..."
+                        ):
+
+                            try:
+
+                                ai_result = generate_analysis(
+                                    question=ai_prompt,
+                                    company="Portfolio Intelligence",
+                                    data_context=ai_context,
+                                )
+
+                                if ai_result:
+                                    st.markdown(ai_result)
+
+                                else:
+                                    st.warning(
+                                        "Gemini did not return an analysis. "
+                                        "The deterministic portfolio analytics "
+                                        "remain available."
+                                    )
+
+                            except Exception as e:
+
+                                error_text = str(e)
+
+                                if (
+                                    "429" in error_text
+                                    or "RESOURCE_EXHAUSTED" in error_text
+                                ):
+
+                                    st.warning(
+                                        "Gemini quota has been reached. "
+                                        "The deterministic portfolio analytics "
+                                        "remain fully available."
+                                    )
+
+                                elif (
+                                    "503" in error_text
+                                    or "UNAVAILABLE" in error_text
+                                ):
+
+                                    st.warning(
+                                        "Gemini is temporarily unavailable. "
+                                        "The deterministic portfolio analytics "
+                                        "remain fully available."
+                                    )
+
+                                else:
+
+                                    st.error(
+                                        f"AI portfolio analysis failed: {error_text}"
+                                    )
+
+                    st.caption(
+                        "Portfolio analytics are quantitative estimates based on "
+                        "available Yahoo Finance historical data. Scenario analysis, "
+                        "risk scores and reference allocations are educational models "
+                        "and are not guarantees or personalized investment advice."
+                    )
+
 
 elif module == "Risk Analysis":
 
