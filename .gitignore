@@ -1,0 +1,84 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# IDE / OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Backups
+*.backup*
+*.before_*
+*_backup*
+*.bak
+
+# Temporary / repair scripts
+_final_patch.py
+patch_final.py
+fix_app_top.py
+fix_encoding.py
+fix_remaining_encoding.py
+fix_warning_encoding.py
+cleanup_apex_css.py
+cleanup_apex_duplicates.py
+cleanup_apex_import.py
+remove_old_custom_css.py
+repair_mojibake.py
+discover_yahoo_global_backup.py
+test_failed_yahoo.py
+test_tejhq.py
+test_tejhq_full.py
+test_tejhq_symbols.py
+
+# Development / discovery scripts
+app.py.UI_INTEGRATION_BASELINE_20260915.py
+check_yahoo_fixed_income.py
+discover_tejhq_fixed_income.py
+discover_yahoo_fixed_income.py
+discover_yahoo_global.py
+discover_yahoo_markets.py
+indian_equities.py
+
+# Archives
+*.zip
+
+# Diagnostics / reports
+*_diagnostic.txt
+full_fix_report_*.txt
+full_system_diagnostic_*.txt
+
+# Intermediate discovery outputs
+yahoo_all_candidates.csv
+yahoo_global_candidates.csv
+yahoo_global_discovery.csv
+yahoo_global_failed.csv
+yahoo_global_universe.backup*.csv
+yahoo_indices_crypto_commodities.csv
+yahoo_fixed_income_discovery.csv
+tejhq_fixed_income_discovery.csv
+tejhq_yahoo_crosscheck.csv
+
+# Local generated folders
+stitch_export/
+stitch_financial_analysis_terminal_ui_system/
+
+# Test/cache folders
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Logs
+*.log
