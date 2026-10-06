@@ -985,57 +985,73 @@ def get_intraday_history(ticker, period="1d", interval="1m"):
 
 @st.cache_data(ttl=180, show_spinner=False)
 def get_company_info(ticker):
-    """Fetch Yahoo Finance company/fundamental information with a resilient fallback."""
-    try:
-        yf_ticker = yf.Ticker(ticker)
+    """Fetch Yahoo Finance company/fundamental information with retries."""
+    import time
 
+    ticker = str(ticker or "").strip()
+
+    if not ticker:
+        return {}
+
+    # Yahoo's quoteSummary/info endpoint can occasionally return
+    # transient 401/429/503 errors, especially on hosted environments.
+    # Retry with a fresh Ticker object before using the limited fast_info fallback.
+    for attempt in range(3):
         try:
+            yf_ticker = yf.Ticker(ticker)
             info = yf_ticker.info
+
             if isinstance(info, dict) and info:
                 return info
+
         except Exception:
             pass
 
-        try:
-            fast = yf_ticker.fast_info
-            if fast:
-                info = {}
+        if attempt < 2:
+            time.sleep(1.5)
 
-                fields = {
-                    "currency": "currency",
-                    "exchange": "exchange",
-                    "quoteType": "quoteType",
-                    "marketCap": "marketCap",
-                    "currentPrice": "lastPrice",
-                    "previousClose": "previousClose",
-                    "open": "open",
-                    "dayHigh": "dayHigh",
-                    "dayLow": "dayLow",
-                    "fiftyDayAverage": "fiftyDayAverage",
-                    "twoHundredDayAverage": "twoHundredDayAverage",
-                    "sharesOutstanding": "shares",
-                    "yearHigh": "yearHigh",
-                    "yearLow": "yearLow",
-                    "yearChange": "yearChange",
-                }
+    # Fallback for basic market/company information only.
+    # fast_info does NOT contain most valuation fundamentals.
+    try:
+        yf_ticker = yf.Ticker(ticker)
+        fast = yf_ticker.fast_info
 
-                for target, source in fields.items():
-                    try:
-                        value = fast.get(source)
-                        if value is not None:
-                            info[target] = value
-                    except Exception:
-                        pass
+        if fast:
+            info = {}
 
-                if info:
-                    return info
-        except Exception:
-            pass
+            fields = {
+                "currency": "currency",
+                "exchange": "exchange",
+                "quoteType": "quoteType",
+                "marketCap": "marketCap",
+                "currentPrice": "lastPrice",
+                "previousClose": "previousClose",
+                "open": "open",
+                "dayHigh": "dayHigh",
+                "dayLow": "dayLow",
+                "fiftyDayAverage": "fiftyDayAverage",
+                "twoHundredDayAverage": "twoHundredDayAverage",
+                "sharesOutstanding": "shares",
+                "yearHigh": "yearHigh",
+                "yearLow": "yearLow",
+                "yearChange": "yearChange",
+            }
 
-        return {}
+            for target, source in fields.items():
+                try:
+                    value = fast.get(source)
+                    if value is not None:
+                        info[target] = value
+                except Exception:
+                    pass
+
+            return info
 
     except Exception:
-        return {}
+        pass
+
+    return {}
+
 def get_dashboard_market_data(watchlist):
     """
     Fetch Dashboard market data efficiently.
