@@ -15,20 +15,44 @@ def test_asset_details_keeps_master_universe_classes(monkeypatch):
                 "CRYPTO",
                 "FX",
             ],
-            "region": ["Asia", "Asia", "Global", "Global", "Asia", "Global", "Global"],
-            "country": ["India", "India", "US", "US", "India", "US", "US"],
+            "region": [
+                "Asia",
+                "Asia",
+                "Global",
+                "Global",
+                "Asia",
+                "Global",
+                "Global",
+            ],
+            "country": [
+                "India",
+                "India",
+                "US",
+                "US",
+                "India",
+                "US",
+                "US",
+            ],
         }
     )
 
     monkeypatch.setattr(dashboard_system_map, "load_universe", lambda: df)
 
-    details = dashboard_system_map._asset_details()
-    counts = {item["key"]: item["count"] for item in details}
+    counts = dashboard_system_map._live_counts()
 
-    assert set(counts) == {"equity", "fixed_income", "commodity", "index", "crypto", "fx"}
-    assert counts["equity"] == 2
-    assert counts["fixed_income"] == 1
-    assert counts["commodity"] == 1
-    assert counts["index"] == 1
-    assert counts["crypto"] == 1
-    assert counts["fx"] == 1
+    assert set(counts.keys()) == {
+        "Equities",
+        "Fixed Income",
+        "Commodities",
+        "Indices / Benchmarks",
+        "Cryptocurrencies",
+        "FX / Currencies",
+    }
+
+    assert counts["Equities"] == 2
+    assert counts["Fixed Income"] == 1
+    assert counts["Commodities"] == 1
+    assert counts["Indices / Benchmarks"] == 1
+    assert counts["Cryptocurrencies"] == 1
+    assert counts["FX / Currencies"] == 1
+
