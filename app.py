@@ -2680,11 +2680,11 @@ def get_listing_currency(ticker):
 
 def currency_symbol(currency):
     symbols = {
-        "INR": "INR ",
+        "INR": "\u20b9",
         "USD": "$",
-        "JPY": "Â¥",
-        "GBP": "Â£",
-        "EUR": "EUR ",
+        "JPY": "\u00a5",
+        "GBP": "\u00a3",
+        "EUR": "\u20ac",
         "HKD": "HK$",
         "AUD": "A$",
         "CAD": "C$",
@@ -9269,4 +9269,5 @@ st.markdown(
 )
 
 # END_FINAL_CLEAN_CONTAINMENT_V3
+
 
