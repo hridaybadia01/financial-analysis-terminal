@@ -1,4 +1,4 @@
-﻿"""
+"""
 Financial Analysis Terminal
 ============================
 A Streamlit-based equity research terminal for Indian (NSE-focused) markets,
@@ -588,7 +588,7 @@ UNIVERSE_BY_TICKER = (
 # ------------------------------------------------------------
 
 def get_security_label(ticker):
-    """Return Name â€¢ Ticker display label."""
+    """Return Name • Ticker display label."""
 
     ticker = str(ticker).strip()
 
@@ -598,7 +598,7 @@ def get_security_label(ticker):
         name = str(record.get("name", ticker)).strip()
 
         if name:
-            return f"{name} â€¢ {ticker}"
+            return f"{name} • {ticker}"
 
     return ticker
 
@@ -638,7 +638,7 @@ def get_security_labels(
     region=None,
     country=None,
 ):
-    """Return Name â€¢ Ticker labels from the master universe."""
+    """Return Name • Ticker labels from the master universe."""
 
     tickers = get_security_tickers(
         asset_class=asset_class,
@@ -2553,7 +2553,7 @@ quick_ticker = st.sidebar.text_input(
 quick_matches = search_companies(quick_ticker)
 quick_selected_ticker = ""
 if quick_ticker.strip() and quick_matches:
-    quick_labels = [f"{name}  â€¢  {display_ticker(ticker)}" for name, ticker in quick_matches]
+    quick_labels = [f"{name}  •  {display_ticker(ticker)}" for name, ticker in quick_matches]
     quick_choice = st.sidebar.selectbox("Matching companies", quick_labels, key="quick_search_matches")
     quick_selected_ticker = quick_matches[quick_labels.index(quick_choice)][1]
 elif quick_ticker.strip():
@@ -2680,11 +2680,11 @@ def get_listing_currency(ticker):
 
 def currency_symbol(currency):
     symbols = {
-        "INR": "\u20b9",
+        "INR": "₹",
         "USD": "$",
-        "JPY": "\u00a5",
-        "GBP": "\u00a3",
-        "EUR": "\u20ac",
+        "JPY": "¥",
+        "GBP": "£",
+        "EUR": "€",
         "HKD": "HK$",
         "AUD": "A$",
         "CAD": "C$",
@@ -2882,7 +2882,7 @@ if module == "Dashboard":
         "Dashboard",
         "Live market overview, watchlist and sector performance",
         "NSE Market Open" if market_open else "NSE Market Closed",
-        datetime.now(IST).strftime("%a %d %b %Y â€¢ %H:%M IST")
+        datetime.now(IST).strftime("%a %d %b %Y • %H:%M IST")
     )
 
     render_dashboard_system_map()
@@ -3004,7 +3004,7 @@ if module == "Dashboard":
 
             with wcol2:
                 if st.button(
-                    "ï¼‹  ADD",
+                    "＋  ADD",
                     key="dashboard_watchlist_add_button",
                     width="stretch",
                     type="secondary",
@@ -3082,7 +3082,7 @@ elif module == "Company Analysis":
         "Company Analysis",
         "Security profile, valuation context, chart workstation and fundamentals",
         "LIVE DATA",
-        datetime.now(IST).strftime("%a %d %b %Y â€¢ %H:%M IST")
+        datetime.now(IST).strftime("%a %d %b %Y • %H:%M IST")
     )
 
     # --------------------------------------------------------
@@ -3126,7 +3126,7 @@ elif module == "Company Analysis":
             key="company_analysis_security"
         )
 
-        ticker = selected_label.rsplit(" â€¢ ", 1)[-1]
+        ticker = selected_label.rsplit(" • ", 1)[-1]
 
         load_clicked = st.button(
             "LOAD SECURITY",
@@ -3203,12 +3203,12 @@ elif module == "Company Analysis":
                 with title_col:
                     st.markdown(f"<div class='company-analysis-company-name'>{escape(company_name)}</div>", unsafe_allow_html=True)
                     st.caption(
-                        f"{display_ticker(active_ticker)}  â€¢  {exchange}  â€¢  {sector}  â€¢  {country}"
+                        f"{display_ticker(active_ticker)}  •  {exchange}  •  {sector}  •  {country}"
                     )
                     if website:
                         st.caption(website)
                 with price_col:
-                    st.caption(f"{exchange} DELAYED Â· {active_currency or 'DATA NOT AVAILABLE'}")
+                    st.caption(f"{exchange} DELAYED · {active_currency or 'DATA NOT AVAILABLE'}")
                     st.metric(
                         "Last Price",
                         format_master_currency(current_price, active_ticker),
@@ -3355,7 +3355,7 @@ elif module == "Company Analysis":
             # ---------------- PRICE CHART ----------------
             with tabs[2]:
                 st.markdown("#### Price / Chart Workstation")
-                st.caption("TIMEFRAME  Â·  OHLCV  Â·  INDICATORS")
+                st.caption("TIMEFRAME  ·  OHLCV  ·  INDICATORS")
                 primary_timeframes = ["1D", "1W", "1M", "1Y", "5Y"]
                 tf_cols = st.columns(len(primary_timeframes))
                 for i, tf in enumerate(primary_timeframes):
@@ -3560,7 +3560,7 @@ elif module == "Company Analysis":
                     assessment.append("The security closed lower in the latest available session.")
 
                 for point in assessment:
-                    st.write("â€¢ " + point)
+                    st.write("• " + point)
                 if not assessment:
                     st.caption("Insufficient data to generate a summary for this security.")
                 st.caption("This is quantitative screening based on retrieved data - not investment advice.")
@@ -3576,7 +3576,7 @@ elif module == "Watchlist":
         "Watchlist",
         "Live security tracker across the terminal universe",
         "WATCHLIST",
-        datetime.now(IST).strftime("%a %d %b %Y â€¢ %H:%M IST")
+        datetime.now(IST).strftime("%a %d %b %Y • %H:%M IST")
     )
 
     watchlist_data = get_dashboard_market_data(tuple(st.session_state["watchlist"]))
@@ -3635,7 +3635,7 @@ elif module == "Market News":
         "Market News",
         "Current market and company headlines from the existing RSS feed",
         "RSS FEED",
-        datetime.now(IST).strftime("%a %d %b %Y â€¢ %H:%M IST")
+        datetime.now(IST).strftime("%a %d %b %Y • %H:%M IST")
     )
     news_query_options = {
         "Indian Markets": "NSE OR Nifty OR Sensex stock market India",
@@ -4247,7 +4247,7 @@ elif module == "Valuation":
 
             st.markdown(f"### {company_name}")
             st.caption(
-                f"Ticker: {ticker}  â€¢  Listing currency: {local_currency}"
+                f"Ticker: {ticker}  •  Listing currency: {local_currency}"
             )
 
             val_tabs = st.tabs([
@@ -4904,7 +4904,7 @@ elif module == "Peer Comparison":
         )
 
         st.caption(
-            f"{company_name}  â€¢  "
+            f"{company_name}  •  "
             f"Listing currency: {listing_currency}"
         )
 
@@ -7325,7 +7325,7 @@ elif module == "Technical Analysis":
         "Technical Analysis",
         "Deterministic price, trend, momentum and volatility analysis",
         "ANALYTICS",
-        datetime.now(IST).strftime("%a %d %b %Y â€¢ %H:%M IST")
+        datetime.now(IST).strftime("%a %d %b %Y • %H:%M IST")
     )
 
     ticker = security_dropdown(
@@ -7348,7 +7348,7 @@ elif module == "Technical Analysis":
         else:
             remember_ticker(ticker)
             period, interval = TIMEFRAMES[tf_label]
-            with st.spinner("Retrieving historical price dataâ€¦"):
+            with st.spinner("Retrieving historical price data…"):
                 history = get_history(ticker, period, interval)
 
             security_metadata = UNIVERSE_BY_TICKER.get(ticker, {})
@@ -7373,7 +7373,7 @@ elif module == "Portfolio":
         "Portfolio Intelligence",
         "Holdings, risk, diversification, scenarios and portfolio decision support",
         "PORTFOLIO",
-        datetime.now(IST).strftime("%a %d %b %Y â€¢ %H:%M IST")
+        datetime.now(IST).strftime("%a %d %b %Y • %H:%M IST")
     )
 
     with st.container(key="portfolio-analysis-page"):
@@ -7512,7 +7512,7 @@ elif module == "Portfolio":
                 if hist.empty:
 
                     st.warning(
-                        f"No historical data found for {h['ticker']} â€” skipped."
+                        f"No historical data found for {h['ticker']} — skipped."
                     )
 
                     continue
@@ -7521,7 +7521,7 @@ elif module == "Portfolio":
                     current_price = float(hist["Close"].dropna().iloc[-1])
                 except Exception:
                     st.warning(
-                        f"Current price unavailable for {h['ticker']} â€” skipped."
+                        f"Current price unavailable for {h['ticker']} — skipped."
                     )
                     continue
 
@@ -7823,13 +7823,13 @@ elif module == "Portfolio":
                     holdings_display["Current Price"] = holdings_display[
                         "Current Price"
                     ].map(
-                        lambda x: f"â‚¹{x:,.2f}"
+                        lambda x: f"₹{x:,.2f}"
                     )
 
                     holdings_display["Market Value"] = holdings_display[
                         "Market Value"
                     ].map(
-                        lambda x: f"â‚¹{x:,.2f}"
+                        lambda x: f"₹{x:,.2f}"
                     )
 
                     holdings_display["Weight %"] = holdings_display[
@@ -8225,12 +8225,12 @@ elif module == "Portfolio":
                     )
 
                     s2.metric(
-                        "Estimated Portfolio Impact",
+                        "Estimated ₹ Impact",
                         f"{stress['impact_pct'] * 100:+.2f}%",
                     )
 
                     s3.metric(
-                        "Estimated â‚¹ Impact",
+                        "Estimated ₹ Impact",
                         format_inr_scale(
                             stress["impact_value"]
                         ),
@@ -8289,8 +8289,8 @@ elif module == "Portfolio":
                             .map(lambda x: f"{x:+.2f}%")
                         )
 
-                        rebalance_display["Approx. â‚¹ Change"] = (
-                            rebalance_display["Approx. â‚¹ Change"]
+                        rebalance_display["Approx. ₹ Change"] = (
+                            rebalance_display["Approx. ₹ Change"]
                             .map(lambda x: f"INR {x:+,.0f}")
                         )
 
@@ -8644,7 +8644,7 @@ elif module == "Risk Analysis":
                 st.metric("Downside Deviation (annualized)", risk_value("Downside Risk", downside_dev, "%"))
 
             st.caption(
-                f"{asset_class} Â· {currency or 'DATA NOT AVAILABLE'} Â· {periods_per_year or 'DATA NOT AVAILABLE'} observations/year. "
+                f"{asset_class} · {currency or 'DATA NOT AVAILABLE'} · {periods_per_year or 'DATA NOT AVAILABLE'} observations/year. "
                 f"{capability['notes']} "
                 + ("Sharpe/Sortino use a 6.5% annual Indian G-Sec proxy only for INR equities." if risk_free_annual is not None else "No currency-matched risk-free series is available; Sharpe/Sortino are DATA NOT AVAILABLE.")
             )
@@ -8929,8 +8929,8 @@ context-aware rather than producing a predetermined report.
 
 st.divider()
 st.markdown(
-    '<div class="disclaimer">Financial Analysis Terminal â€¢ Academic prototype â€¢ '
-    'Data via Yahoo Finance (delayed) â€¢ Not investment advice</div>',
+    '<div class="disclaimer">Financial Analysis Terminal • Academic prototype • '
+    'Data via Yahoo Finance (delayed) • Not investment advice</div>',
     unsafe_allow_html=True,
 )
 
