@@ -1004,9 +1004,13 @@ def get_company_info(ticker):
             if isinstance(info, dict) and info:
                 return info
 
-        except Exception:
-            pass
-
+        except Exception as exc:
+            print(
+                f'[YAHOO FUNDAMENTALS] {ticker} '
+                f'attempt {attempt + 1}/3 failed: '
+                f'{type(exc).__name__}: {exc}',
+                flush=True,
+            )
         if attempt < 2:
             time.sleep(1.5)
 
@@ -1042,9 +1046,12 @@ def get_company_info(ticker):
                     value = fast.get(source)
                     if value is not None:
                         info[target] = value
-                except Exception:
-                    pass
-
+                except Exception as exc:
+                    print(
+                        f'[YAHOO FAST_INFO FALLBACK] {ticker} failed: '
+                        f'{type(exc).__name__}: {exc}',
+                        flush=True,
+                    )
             return info
 
     except Exception:
