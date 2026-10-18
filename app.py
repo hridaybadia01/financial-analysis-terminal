@@ -8549,6 +8549,7 @@ STRUCTURED PORTFOLIO CONTEXT:
 
                                 if ai_result:
                                     st.session_state["portfolio_ai_result"] = ai_result
+                                    st.markdown(ai_result)
 
                                 else:
                                     st.warning(
