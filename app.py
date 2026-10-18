@@ -937,7 +937,7 @@ def get_sidebar_news():
 # DATA LAYER  (all live calls funnel through these functions)
 # ============================================================
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def get_history(ticker, period="max", interval="1d"):
     """Fetch OHLCV history. Never raises - returns an empty DataFrame on failure."""
     try:
@@ -983,7 +983,7 @@ def get_intraday_history(ticker, period="1d", interval="1m"):
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=180, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_company_info(ticker):
     """Fetch Yahoo Finance company/fundamental information with retries."""
     import time
@@ -1011,6 +1011,18 @@ def get_company_info(ticker):
                 f'{type(exc).__name__}: {exc}',
                 flush=True,
             )
+            error_text = str(exc).lower()
+            if (
+                "ratelimit" in type(exc).__name__.lower()
+                or "rate limit" in error_text
+                or "too many requests" in error_text
+            ):
+                print(
+                    f'[YAHOO FUNDAMENTALS] {ticker}: stopping retries '
+                    'because Yahoo is rate limiting this request.',
+                    flush=True,
+                )
+                break
         if attempt < 2:
             time.sleep(1.5)
 
@@ -1812,28 +1824,68 @@ def create_bar_comparison(categories, series_dict, title, y_title=""):
 # ============================================================
 
 def compute_returns_table(history):
-    """Return a dict of {label: pct_return} for the standard lookback windows."""
+    """Calculate returns using calendar lookbacks and available dated closes."""
     out = {}
-    if history is None or history.empty:
+    if history is None or history.empty or "Close" not in history.columns:
         return out
-    close = history["Close"].dropna()
+
+    close = history["Close"].dropna().sort_index()
+    if close.empty:
+        return out
+
     last = close.iloc[-1]
-    for label, periods in RETURN_WINDOWS:
-        if len(close) > periods:
-            base = close.iloc[-(periods + 1)]
-            out[label] = (last / base - 1) * 100 if base else None
-        else:
+    last_date = pd.Timestamp(close.index[-1])
+
+    # Calendar-day lookbacks avoid false N/A values caused by holidays,
+    # weekends, and fewer-than-expected trading rows.
+    lookbacks = {
+        "1D": 1,
+        "1W": 7,
+        "1M": 30,
+        "3M": 91,
+        "6M": 182,
+        "1Y": 365,
+        "3Y": 365 * 3,
+        "5Y": 365 * 5,
+    }
+
+    for label, _periods in RETURN_WINDOWS:
+        days = lookbacks.get(label)
+        if days is None:
+            out[label] = None
+            continue
+
+        if label == "1D":
+            # A daily return is relative to the previous available close.
+            if len(close) > 1 and close.iloc[-2] != 0:
+                out[label] = (last / close.iloc[-2] - 1) * 100
+            else:
+                out[label] = None
+            continue
+
+        target_date = last_date - pd.Timedelta(days=days)
+        try:
+            eligible = close.loc[close.index <= target_date]
+            base = eligible.iloc[-1] if not eligible.empty else None
+            out[label] = (
+                (last / base - 1) * 100
+                if base is not None and base != 0
+                else None
+            )
+        except (TypeError, ValueError, IndexError):
             out[label] = None
 
-    # YTD
-    this_year = close[close.index.year == close.index[-1].year]
-    if len(this_year) > 1:
-        out["YTD"] = (last / this_year.iloc[0] - 1) * 100
-    else:
+    # YTD: compare the latest close with the first available close this year.
+    try:
+        this_year = close.loc[close.index.year == last_date.year]
+        if len(this_year) > 1 and this_year.iloc[0] != 0:
+            out["YTD"] = (last / this_year.iloc[0] - 1) * 100
+        else:
+            out["YTD"] = None
+    except (AttributeError, TypeError, ValueError):
         out["YTD"] = None
 
     return out
-
 
 def compute_fundamental_ratios(info, income_df, balance_df, cashflow_df, asset_class="EQUITY"):
     """Assemble a dict of ratio categories from info + statements (N/A when missing)."""
@@ -3341,23 +3393,52 @@ elif module == "Company Analysis":
                         st.metric(label, format_percent(val, already_pct=True) if val is not None else "N/A")
 
                 st.markdown("#### 52-Week Range")
+
                 wk_high = safe_value(info, "fiftyTwoWeekHigh")
                 wk_low = safe_value(info, "fiftyTwoWeekLow")
-                if wk_high and wk_low:
+
+                # Yahoo's company-info endpoint can be rate limited. Derive
+                # the range from the cached OHLCV history if those fields are absent.
+                if snapshot_hist is not None and not snapshot_hist.empty:
+                    range_history = snapshot_hist.dropna(subset=["Close"]).tail(253)
+                    if not range_history.empty:
+                        if wk_high is None and "High" in range_history.columns:
+                            values = range_history["High"].dropna()
+                            wk_high = float(values.max()) if not values.empty else None
+                        if wk_low is None and "Low" in range_history.columns:
+                            values = range_history["Low"].dropna()
+                            wk_low = float(values.min()) if not values.empty else None
+
+                if wk_high is not None and wk_low is not None and wk_high > wk_low:
                     drawdown_from_high = (current_price / wk_high - 1) * 100
-                    range_pct = (current_price - wk_low) / (wk_high - wk_low) * 100 if wk_high != wk_low else None
-                    rc1, rc2, rc3 = st.columns(3)
+                    range_pct = (current_price - wk_low) / (wk_high - wk_low) * 100
+
+                    rc1, rc2, rc3, rc4 = st.columns(4)
                     with rc1:
                         st.metric("52W High", format_master_currency(wk_high, active_ticker))
                     with rc2:
                         st.metric("52W Low", format_master_currency(wk_low, active_ticker))
                     with rc3:
                         st.metric("Drawdown from 52W High", f"{drawdown_from_high:.2f}%")
-                    if range_pct is not None:
-                        st.progress(min(max(range_pct / 100, 0.0), 1.0),
-                                    text=f"Currently {range_pct:.1f}% up the 52-week range")
+                    with rc4:
+                        recent_closes = snapshot_hist["Close"].dropna()
+                        target_date = pd.Timestamp(recent_closes.index[-1]) - pd.Timedelta(days=365)
+                        base_prices = recent_closes.loc[recent_closes.index <= target_date]
+                        if not base_prices.empty and base_prices.iloc[-1] != 0:
+                            wk_return = (recent_closes.iloc[-1] / base_prices.iloc[-1] - 1) * 100
+                            st.metric("52W Return", f"{wk_return:.2f}%")
+                        else:
+                            st.metric("52W Return", "N/A")
+
+                    st.progress(
+                        min(max(range_pct / 100, 0.0), 1.0),
+                        text=f"Currently {range_pct:.1f}% up the 52-week range",
+                    )
                 else:
-                    st.caption("52-week range unavailable for this security.")
+                    st.caption(
+                        "52-week range unavailable: Yahoo Finance did not return "
+                        "valid high/low values and usable history was insufficient."
+                    )
 
             # ---------------- PRICE CHART ----------------
             with tabs[2]:
