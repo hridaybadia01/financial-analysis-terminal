@@ -423,6 +423,14 @@ can perform the screen.
 
             last_error = exc
 
+            print(
+                f"[Gemini diagnostic] attempt={attempt + 1}/3 "
+                f"model={MODEL_NAME} "
+                f"error_type={type(exc).__name__} "
+                f"error={str(exc)[:1000]}",
+                flush=True,
+            )
+
             if attempt < 2:
 
                 time.sleep(
