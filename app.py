@@ -86,6 +86,15 @@ st.markdown(
     """
     <style>
 
+    .company-analysis-range-value {
+        font-size: 0.92rem;
+        font-weight: 650;
+        line-height: 1.5;
+        white-space: nowrap;
+        overflow: visible;
+        color: #8fbaf0;
+        font-variant-numeric: tabular-nums;
+    }
     /* ========================================================
        TABLE CONTAINER
        ======================================================== */
@@ -3302,7 +3311,15 @@ elif module == "Company Analysis":
                 for metric_col, (label, value) in zip(header_metrics, header_values):
                     with metric_col:
                         st.caption(label)
-                        st.markdown(f"**{value}**")
+
+                        if label in ("DAY RANGE", "52W LOW - HIGH"):
+                            st.markdown(
+                                f"<div class='company-analysis-range-value'>"
+                                f"{escape(str(value))}</div>",
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.markdown(f"**{value}**")
 
             st.caption("Prices below reflect the latest data available from Yahoo Finance - "
                        "delayed, not live tick-by-tick exchange data.")
