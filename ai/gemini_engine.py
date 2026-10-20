@@ -11,7 +11,7 @@ from ai.terminal_tools import (
 )
 
 
-MODEL_NAME = "gemini-3.6-flash"
+MODEL_NAME = "gemini-3.5-flash-lite"
 
 
 # ============================================================
