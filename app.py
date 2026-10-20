@@ -9369,6 +9369,51 @@ st.markdown(
         box-sizing: border-box !important;
     }
 
+    /* DASHBOARD_TARGETED_LAYOUT_FIX_V1 */
+    .dashboard-index-card {
+        overflow: visible !important;
+        padding: 0.85rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+
+    .dashboard-index-card * {
+        overflow: visible !important;
+        overflow-wrap: break-word !important;
+        word-break: normal !important;
+    }
+
+    .st-key-dashboard-snapshot [data-testid="column"] {
+        min-width: 0 !important;
+        padding-left: 0.3rem !important;
+        padding-right: 0.3rem !important;
+    }
+
+    .st-key-dashboard-watchlist-panel,
+    .st-key-dashboard-watchlist-panel [data-testid="stHorizontalBlock"],
+    .st-key-dashboard-watchlist-panel [data-testid="column"] {
+        overflow: visible !important;
+    }
+
+    .st-key-dashboard-watchlist-panel [data-testid="stHorizontalBlock"] {
+        align-items: end !important;
+        gap: 0.75rem !important;
+    }
+
+    .st-key-dashboard-watchlist-panel [data-testid="stButton"],
+    .st-key-dashboard-watchlist-panel [data-testid="stBaseButton-secondary"],
+    .st-key-dashboard-watchlist-panel button {
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 2.5rem !important;
+        overflow: visible !important;
+        white-space: normal !important;
+    }
+
+    .st-key-dashboard-watchlist-panel [data-testid="stSelectbox"],
+    .st-key-dashboard-watchlist-panel [data-testid="stSelectbox"] > div {
+        min-width: 0 !important;
+        width: 100% !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
