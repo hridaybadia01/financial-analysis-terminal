@@ -578,7 +578,124 @@ SECTOR_GROUPS = {
 # security selection.
 # ============================================================
 
-UNIVERSE_DF = load_universe()
+# ============================================================
+# GLOBAL COUNTRY + ASSET FILTERS
+# Applied to the master security universe used by app.py.
+# ============================================================
+
+_UNIVERSE_ALL = load_universe().copy()
+
+if not _UNIVERSE_ALL.empty:
+    for _column in ("country", "asset_class", "ticker", "name"):
+        if _column not in _UNIVERSE_ALL.columns:
+            _UNIVERSE_ALL[_column] = ""
+
+    _UNIVERSE_ALL["country"] = (
+        _UNIVERSE_ALL["country"].fillna("").astype(str).str.strip()
+    )
+    _UNIVERSE_ALL["asset_class"] = (
+        _UNIVERSE_ALL["asset_class"].fillna("").astype(str).str.strip()
+    )
+
+    _countries = sorted(
+        value for value in _UNIVERSE_ALL["country"].unique()
+        if value and value.lower() not in {"nan", "none", "unknown", "global"}
+    )
+
+    _asset_classes = sorted(
+        value for value in _UNIVERSE_ALL["asset_class"].unique()
+        if value and value.lower() not in {"nan", "none", "unknown"}
+    )
+
+    # Persist selections through Streamlit reruns and page navigation.
+    if "global_country_filter" not in st.session_state:
+        st.session_state["global_country_filter"] = "All Countries"
+    if "global_asset_filter" not in st.session_state:
+        st.session_state["global_asset_filter"] = "All Asset Classes"
+
+    # Reset invalid stored values if the available universe has changed.
+    _country_options = ["All Countries"] + _countries
+    if st.session_state["global_country_filter"] not in _country_options:
+        st.session_state["global_country_filter"] = "All Countries"
+
+    _country_for_asset_options = st.session_state["global_country_filter"]
+    _asset_source = _UNIVERSE_ALL
+    if _country_for_asset_options != "All Countries":
+        _asset_source = _asset_source[
+            _asset_source["country"].str.casefold()
+            == _country_for_asset_options.casefold()
+        ]
+
+    _available_assets = sorted(
+        value for value in _asset_source["asset_class"].unique()
+        if value and value.lower() not in {"nan", "none", "unknown"}
+    )
+    _asset_options = ["All Asset Classes"] + _available_assets
+
+    if st.session_state["global_asset_filter"] not in _asset_options:
+        st.session_state["global_asset_filter"] = "All Asset Classes"
+
+    st.sidebar.divider()
+    st.sidebar.markdown("### Global Market Filters")
+
+    st.sidebar.selectbox(
+        "Country / Market",
+        options=_country_options,
+        key="global_country_filter",
+        help="Filters securities using the country metadata in the market universe.",
+    )
+
+    # Recompute valid asset classes after the country selector changes.
+    _selected_country = st.session_state["global_country_filter"]
+    _asset_source = _UNIVERSE_ALL
+    if _selected_country != "All Countries":
+        _asset_source = _asset_source[
+            _asset_source["country"].str.casefold()
+            == _selected_country.casefold()
+        ]
+
+    _available_assets = sorted(
+        value for value in _asset_source["asset_class"].unique()
+        if value and value.lower() not in {"nan", "none", "unknown"}
+    )
+    _asset_options = ["All Asset Classes"] + _available_assets
+
+    if st.session_state["global_asset_filter"] not in _asset_options:
+        st.session_state["global_asset_filter"] = "All Asset Classes"
+
+    st.sidebar.selectbox(
+        "Asset Class",
+        options=_asset_options,
+        key="global_asset_filter",
+        help="Limits the security universe to the selected instrument class.",
+    )
+
+    # Apply both selections to the master universe used by this application.
+    UNIVERSE_DF = _UNIVERSE_ALL.copy()
+    _selected_country = st.session_state["global_country_filter"]
+    _selected_asset = st.session_state["global_asset_filter"]
+
+    if _selected_country != "All Countries":
+        UNIVERSE_DF = UNIVERSE_DF[
+            UNIVERSE_DF["country"].astype(str).str.casefold()
+            == _selected_country.casefold()
+        ]
+
+    if _selected_asset != "All Asset Classes":
+        UNIVERSE_DF = UNIVERSE_DF[
+            UNIVERSE_DF["asset_class"].astype(str).str.casefold()
+            == _selected_asset.casefold()
+        ]
+
+    UNIVERSE_DF = UNIVERSE_DF.reset_index(drop=True)
+
+    if UNIVERSE_DF.empty:
+        st.sidebar.warning(
+            "No securities match this country and asset-class combination. "
+            "Choose another combination."
+        )
+else:
+    UNIVERSE_DF = _UNIVERSE_ALL.copy()
 
 # ------------------------------------------------------------
 # TICKER -> METADATA
@@ -8638,6 +8755,55 @@ elif module == "Risk Analysis":
         st.caption("Benchmark beta is NOT APPLICABLE for this asset class.")
     lookback_label = st.selectbox("Lookback Period", ["1Y", "2Y", "5Y"], index=0)
 
+    # RISK_ENHANCEMENT_V1: interactive risk controls
+    risk_model_col1, risk_model_col2, risk_model_col3 = st.columns(3)
+    with risk_model_col1:
+        risk_confidence_label = st.selectbox(
+            "Enhanced VaR Confidence", ["95%", "97.5%", "99%"],
+            key="risk_enhanced_confidence"
+        )
+    with risk_model_col2:
+        risk_horizon_days = st.selectbox(
+            "Risk Horizon", [1, 5, 10, 21],
+            format_func=lambda value: f"{value} trading day" if value == 1 else f"{value} trading days",
+            key="risk_enhanced_horizon"
+        )
+    with risk_model_col3:
+        risk_model_method = st.selectbox(
+            "VaR Method",
+            ["Historical", "Parametric (Normal)", "Monte Carlo (Normal)"],
+            key="risk_enhanced_method"
+        )
+    stress_shock_pct = st.selectbox(
+        "Hypothetical price shock",
+        options=[-50, -30, -20, -10, -5, 0, 5, 10, 20, 30, 50],
+        index=3,
+        format_func=lambda value: f"{value:+d}%",
+        key="risk_enhanced_stress_shock"
+    )
+
+    _stress_currency = str(
+        selected_risk_record.get("currency", "") or ""
+    ).strip().upper()
+    _stress_prefix = (
+        "?" if _stress_currency == "INR"
+        else "$" if _stress_currency == "USD"
+        else f"{_stress_currency} " if _stress_currency
+        else ""
+    )
+
+    stress_exposure = st.number_input(
+        f"Position value for stress test ({_stress_currency or 'currency units'})",
+        min_value=0.0,
+        value=100000.0,
+        step=10000.0,
+        key="risk_enhanced_stress_exposure",
+        help=(
+            "Enter the current value of the position you want to stress-test. "
+            "The default is an illustrative amount, not your actual investment."
+        ),
+    )
+
     if st.button("Calculate Risk Metrics", type="primary"):
         remember_ticker(ticker)
         period, interval = TIMEFRAMES[lookback_label]
@@ -8668,6 +8834,121 @@ elif module == "Risk Analysis":
             max_dd, dd_series = calculate_max_drawdown(close) if len(close) >= 2 else (None, pd.Series(dtype=float))
             var_95 = calculate_var_history(returns, 0.95) if len(returns) >= 2 else None
             var_99 = calculate_var_history(returns, 0.99) if len(returns) >= 2 else None
+
+            # RISK_ENHANCEMENT_V1: tail risk and stress analysis
+            from statistics import NormalDist
+
+            confidence = float(risk_confidence_label.rstrip("%")) / 100.0
+            tail_probability = 1.0 - confidence
+            risk_returns = pd.to_numeric(returns, errors="coerce")
+            risk_returns = risk_returns.replace([np.inf, -np.inf], np.nan).dropna()
+            sample_count = len(risk_returns)
+            enhanced_var = None
+            enhanced_cvar = None
+            daily_vol = None
+            method_note = risk_model_method
+
+            if sample_count >= 20:
+                daily_mean = float(risk_returns.mean())
+                daily_vol = float(risk_returns.std(ddof=1))
+
+                if risk_model_method == "Historical":
+                    horizon_returns = risk_returns.rolling(
+                        risk_horizon_days, min_periods=risk_horizon_days
+                    ).apply(
+                        lambda values: float(np.prod(1.0 + values) - 1.0),
+                        raw=True
+                    ).dropna()
+
+                    if len(horizon_returns) >= 10:
+                        cutoff = float(horizon_returns.quantile(tail_probability))
+                        enhanced_var = max(0.0, -cutoff)
+                        tail = horizon_returns[horizon_returns <= cutoff]
+                        if len(tail):
+                            enhanced_cvar = max(0.0, -float(tail.mean()))
+                    else:
+                        method_note += " (insufficient horizon observations)"
+
+                elif daily_vol > 0:
+                    z = NormalDist().inv_cdf(tail_probability)
+                    horizon_mean = daily_mean * risk_horizon_days
+                    horizon_vol = daily_vol * np.sqrt(risk_horizon_days)
+
+                    if risk_model_method == "Parametric (Normal)":
+                        enhanced_var = max(0.0, -(horizon_mean + z * horizon_vol))
+                        expected_tail_return = (
+                            horizon_mean
+                            - horizon_vol * np.exp(-0.5 * z * z)
+                            / (tail_probability * np.sqrt(2.0 * np.pi))
+                        )
+                        enhanced_cvar = max(0.0, -expected_tail_return)
+                    else:
+                        rng = np.random.default_rng(42)
+                        simulated = rng.normal(
+                            horizon_mean, horizon_vol, size=50000
+                        )
+                        cutoff = float(np.quantile(simulated, tail_probability))
+                        enhanced_var = max(0.0, -cutoff)
+                        tail = simulated[simulated <= cutoff]
+                        if len(tail):
+                            enhanced_cvar = max(0.0, -float(tail.mean()))
+
+            st.markdown("#### Enhanced Tail Risk")
+            tail_columns = st.columns(4)
+            tail_columns[0].metric(
+                f"{risk_horizon_days}-Day VaR ({risk_confidence_label})",
+                f"{enhanced_var * 100:.2f}%" if enhanced_var is not None else "INSUFFICIENT DATA"
+            )
+            tail_columns[1].metric(
+                f"{risk_horizon_days}-Day CVaR / Expected Shortfall",
+                f"{enhanced_cvar * 100:.2f}%" if enhanced_cvar is not None else "INSUFFICIENT DATA"
+            )
+            tail_columns[2].metric(
+                "Daily Volatility",
+                f"{daily_vol * 100:.2f}%" if daily_vol is not None else "INSUFFICIENT DATA"
+            )
+            tail_columns[3].metric("Valid Return Observations", f"{sample_count:,}")
+
+            st.markdown("#### Hypothetical Stress Test")
+            stress_impact = stress_exposure * (stress_shock_pct / 100.0)
+            stress_resulting_value = stress_exposure + stress_impact
+
+            stress_columns = st.columns(3)
+            stress_columns[0].metric(
+                "Assumed Price Shock",
+                f"{stress_shock_pct:+d}%"
+            )
+            stress_columns[1].metric(
+                "Estimated Value Impact",
+                f"{_stress_prefix}{stress_impact:,.2f}",
+                help=(
+                    "Scenario impact = entered position value multiplied by "
+                    "the assumed price shock. Negative values indicate a loss."
+                ),
+            )
+            stress_columns[2].metric(
+                "Value After Scenario",
+                f"{_stress_prefix}{stress_resulting_value:,.2f}",
+                help="Illustrative value after applying the selected shock.",
+            )
+            st.caption(
+                "Illustrative single-position scenario only. This is not a forecast, "
+                "does not model liquidity, taxes, fees, leverage or changes in "
+                "correlations, and is not a maximum-loss estimate."
+            )
+            st.caption(
+                f"Selected method: {method_note}. VaR estimates a loss threshold at the "
+                "chosen confidence level; CVaR estimates average losses beyond that threshold. "
+                "Neither is a maximum-loss guarantee. Parametric and Monte Carlo methods "
+                "assume normally distributed returns; historical data may not represent future "
+                "market conditions. Stress testing is hypothetical, not a forecast."
+            )
+            if sample_count < 20:
+                st.warning(
+                    "At least 20 valid return observations are required for these enhanced estimates."
+                )
+
+
 
             risk_free_annual = 0.065 if asset_class == "EQUITY" and currency == "INR" else None
             sharpe = calculate_sharpe(returns, risk_free_annual, periods_per_year)
